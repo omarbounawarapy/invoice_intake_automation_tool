@@ -340,25 +340,22 @@ The tests should use small local fixtures and must not require network access.
 
 The demonstration deliberately separates **real public source material** from **synthetic messy test cases**.
 
-### Real public source material
+## Project Data and Source Attribution
 
-The repository uses public invoice documents to demonstrate heterogeneous layouts. Source files are downloaded from their original publishers rather than committed to the repository.
+The project uses the publicly available **InvoiceBenchmark** synthetic invoice dataset:
 
-Current source references:
+https://huggingface.co/datasets/jngb-labs/InvoiceBenchmark
 
-1. Smartsheet — construction invoice sample
-   - https://www.smartsheet.com/sites/default/files/2021-11/IC-Free-Printable-Construction-Invoice-11215_PDF.pdf
+The dataset provides synthetic invoice documents together with structured ground-truth records. The invoices contain fictional business and transaction information and are used solely to provide a reproducible corpus for extraction and validation testing.
 
-2. Georgia Department of Economic Development — sample invoice
-   - https://georgia.org/sites/default/files/2021-04/sample_invoice.pdf
+For this project, the PDF invoice files are treated as input data, while the accompanying ground-truth records are used as expected outputs for automated validation.
 
-3. George Mason University — sample invoice
-   - https://fiscal.gmu.edu/wp-content/uploads/2019/03/Sample-Invoice.pdf
+The repository does not claim that the dataset represents real confidential business records. It is used as a controlled demonstration of a document-ingestion workflow that could be adapted to a client's actual invoice formats.
 
-4. Pearson — supplier invoice guidance containing a completed sample invoice
-   - https://www.pearson.com/content/dam/one-dot-com/one-dot-com/global/Files/suppliers/Guidance-for-submitting-a-compliant-invoice-to-Pearson-Singapore.pdf
+Dataset contents are obtained from the original dataset source rather than being represented as proprietary or original project data. Users should consult the dataset repository for its current license, attribution requirements, and permitted uses.
 
-The exact attribution and permitted use of each source remain subject to the source publisher's terms. The project therefore stores source URLs and a downloader script rather than redistributing the original PDFs.
+The repository may also contain small synthetic CSV/XLSX fixtures created specifically to test malformed values, missing fields, duplicate records, and normalization rules.
+
 
 ### Synthetic test cases
 
