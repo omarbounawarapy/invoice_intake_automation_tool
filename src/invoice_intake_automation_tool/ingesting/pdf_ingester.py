@@ -6,6 +6,10 @@ from typing import Iterable
 
 from pdfplumber import open as pdfopen
 from collections import defaultdict
+
+from ..errors import IngestionError
+
+
 @dataclass(frozen=True)
 class Word:
     text: str
@@ -98,7 +102,7 @@ class PdfIngester:
             if anchor in text:
                 return text
 
-        raise ValueError(f"Anchor {anchor!r} not found.")
+        raise IngestionError(f"Anchor {anchor!r} not found.")
 
     def extract_lines_containing_anchor(self,page, anchor: str) -> str:
             lines = self.get_lines(page)
@@ -109,7 +113,7 @@ class PdfIngester:
     
                 if anchor in text:
                     results.append(text)
-            if not results : raise ValueError(f"Anchor {anchor!r} not found.")
+            if not results : raise IngestionError(f"Anchor {anchor!r} not found.")
             
             return results
     
@@ -194,6 +198,6 @@ class PdfIngester:
             if anchor in line_text:
                 return index
 
-        raise ValueError(
+        raise IngestionError(
             f"Anchor {anchor!r} not found."
         )
