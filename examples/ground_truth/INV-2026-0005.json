@@ -1,0 +1,55 @@
+{
+  "invoice_id": "INV-2026-0005",
+  "vendor": "Initech Solutions GmbH",
+  "vendor_country": "DE",
+  "vendor_address": {
+    "street": "Eichkätzchenweg 12",
+    "postal_code": "40990",
+    "city": "Düsseldorf"
+  },
+  "recipient": "Groupe Industriel Dufresne S.A.",
+  "recipient_country": "FR",
+  "recipient_address": {
+    "street": "47 rue des Lilas Perdus",
+    "postal_code": "75008",
+    "city": "Paris"
+  },
+  "date": "2026-03-04",
+  "due_date": "2026-03-18",
+  "line_items": [
+    {
+      "description": "Quarterly newsletter design",
+      "quantity": 2,
+      "unit_price": "30201.70",
+      "vat_rate": "0.20",
+      "amount": "60403.40"
+    }
+  ],
+  "subtotal": "60403.40",
+  "vat_rate": "0.20",
+  "vat_amount": "12080.68",
+  "discount": {
+    "type": "amount",
+    "value": "1812.10",
+    "applied_to": "subtotal",
+    "description": "rebate per agreement",
+    "conditional": false
+  },
+  "discount_amount": "1812.10",
+  "total": "70671.98",
+  "currency": "EUR",
+  "payment_terms": "Payable within 14 days",
+  "bank_details": "Commerzbank | IBAN: DE74 1752 5303 7249 7477 48 | BIC: COBADEFFXXX",
+  "variants": {
+    "vat_variant": "implicit_rate_stated",
+    "discount_variant": "explicit_amount",
+    "number_format": "german",
+    "layout": "paragraph",
+    "consistency": "correct",
+    "edge_case": "single_item"
+  },
+  "rendered_subtotal": "60403.40",
+  "rendered_total": "70671.98",
+  "error_note": null,
+  "is_credit_note": false
+}

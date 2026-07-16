@@ -1,0 +1,97 @@
+{
+  "invoice_id": "INV-2026-0001",
+  "vendor": "Praxis Consulting Group AG",
+  "vendor_country": "AT",
+  "vendor_address": {
+    "street": "Zinnpfeifferallee 33",
+    "postal_code": "1080",
+    "city": "Wien"
+  },
+  "recipient": "Bergkristall Maschinenbau GmbH",
+  "recipient_country": "DE",
+  "recipient_address": {
+    "street": "Beispielgasse 34",
+    "postal_code": "80331",
+    "city": "München"
+  },
+  "date": "2026-04-15",
+  "due_date": "2026-05-15",
+  "line_items": [
+    {
+      "description": "Travel expenses (Frankfurt–Zürich)",
+      "quantity": 3,
+      "unit_price": "26614.40",
+      "vat_rate": "0.20",
+      "amount": "79843.20"
+    },
+    {
+      "description": "Software licence renewal — 50 seats",
+      "quantity": 1,
+      "unit_price": "9583.60",
+      "vat_rate": "0.20",
+      "amount": "9583.60"
+    },
+    {
+      "description": "Executive workshop (2 days)",
+      "quantity": 1,
+      "unit_price": "2614.80",
+      "vat_rate": "0.20",
+      "amount": "2614.80"
+    },
+    {
+      "description": "Hardware procurement — 4 workstations",
+      "quantity": 3,
+      "unit_price": "9834.20",
+      "vat_rate": "0.20",
+      "amount": "29502.60"
+    },
+    {
+      "description": "Compliance audit preparation (regulations may have changed since)",
+      "quantity": 50,
+      "unit_price": "185.70",
+      "vat_rate": "0.20",
+      "amount": "9285.00"
+    },
+    {
+      "description": "Legal opinion — cross-border financing",
+      "quantity": 1,
+      "unit_price": "46646.20",
+      "vat_rate": "0.20",
+      "amount": "46646.20"
+    },
+    {
+      "description": "Consulting hours — Senior Partner",
+      "quantity": 1,
+      "unit_price": "32740.50",
+      "vat_rate": "0.20",
+      "amount": "32740.50"
+    }
+  ],
+  "subtotal": "210215.90",
+  "vat_rate": "0.20",
+  "vat_amount": "42043.18",
+  "discount": {
+    "type": "percentage",
+    "value": "0.02",
+    "applied_to": "subtotal",
+    "description": "early payment discount",
+    "conditional": false
+  },
+  "discount_amount": "4204.32",
+  "total": "248054.76",
+  "currency": "EUR",
+  "payment_terms": "Net 30 days",
+  "bank_details": "Raiffeisenbank Austria | IBAN: AT51 7979 0869 5986 6201 | BIC: RZBAATWWXXX",
+  "variants": {
+    "vat_variant": "implicit_rate_stated",
+    "discount_variant": "explicit_percentage",
+    "number_format": "english",
+    "layout": "mixed",
+    "consistency": "correct",
+    "edge_case": "none"
+  },
+  "rendered_subtotal": "210215.90",
+  "rendered_total": "248054.76",
+  "error_note": null,
+  "is_credit_note": false
+}

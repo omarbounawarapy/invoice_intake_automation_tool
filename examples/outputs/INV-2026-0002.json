@@ -1,0 +1,89 @@
+{
+  "invoice_id": "INV-2026-0002",
+  "is_credit_note": false,
+  "source_file": "INV-2026-0002.pdf",
+  "vendor": "ACME Laboratories International S.A.",
+  "vendor_country": "FR",
+  "vendor_address": {
+    "street": "5 cours Magnolia-Sèche",
+    "postal_code": "13100",
+    "city": "Aix-en-Provence"
+  },
+  "recipient": "Europäische Verwaltungskontor AG",
+  "recipient_country": "AT",
+  "recipient_address": {
+    "street": "Feldspatplatz 9",
+    "postal_code": "5020",
+    "city": "Salzburg"
+  },
+  "invoice_date": "2026-04-10",
+  "due_date": "2026-05-10",
+  "line_items": [
+    {
+      "description": "Travel expenses (London–Vienna)",
+      "quantity": "2",
+      "unit_price": "23279.90",
+      "amount": "46559.80",
+      "vat_rate": "0.20"
+    },
+    {
+      "description": "Executive workshop: 'AI Strategy'",
+      "quantity": "3",
+      "unit_price": "7734.30",
+      "amount": "23202.90",
+      "vat_rate": "0.20"
+    },
+    {
+      "description": "Travel expenses (Frankfurt–Zürich)",
+      "quantity": "1",
+      "unit_price": "47421.00",
+      "amount": "47421.00",
+      "vat_rate": "0.20"
+    },
+    {
+      "description": "Retainer fee — ongoing counsel",
+      "quantity": "10",
+      "unit_price": "457.30",
+      "amount": "4573.00",
+      "vat_rate": "0.20"
+    },
+    {
+      "description": "Cloud infrastructure migration — Phase 2 of 7 (estimated)",
+      "quantity": "1",
+      "unit_price": "944.00",
+      "amount": "944.00",
+      "vat_rate": "0.20"
+    },
+    {
+      "description": "Board meeting facilitation",
+      "quantity": "100",
+      "unit_price": "326.50",
+      "amount": "32650.00",
+      "vat_rate": "0.20"
+    }
+  ],
+  "currency": "EUR",
+  "vat_rate": "0.20",
+  "vat_amount": "31070.14",
+  "discount": {
+    "type": "percentage",
+    "value": "0.02",
+    "applied_to": "subtotal",
+    "description": "Discount (2% early payment discount): -3'107.01 EUR",
+    "conditional": false
+  },
+  "discount_amount": "3107.01",
+  "rendered_subtotal": "155350.70",
+  "rendered_total": "188813.24",
+  "payment_terms": "Net 30 days",
+  "bank_details": "Crédit Agricole | IBAN: FR55 8722 1509 4529 1814 7560 769 | BIC: AGRIFRPPXXX",
+  "layout": "table",
+  "number_format": "swiss",
+  "vat_variant": "applies",
+  "discount_variant": "percentage",
+  "edge_case": "field_bleed",
+  "subtotal": "155350.70",
+  "total": "183313.83",
+  "consistency": "total_error",
+  "consistency_note": "Displayed total 188813.24 differs from computed total 183313.83 by +5499.41 (+3.00%)."
+}
