@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invoice-intake-automation-tool"
+version = "0.1.0"
+description = "Extracts, normalizes, and validates structured data from semi-structured invoice PDFs into a canonical, typed record."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [{ name = "Invoice Intake Automation Tool contributors" }]
+keywords = ["invoice", "pdf", "extraction", "data-normalization", "automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Financial :: Accounting",
+    "Topic :: Text Processing",
+]
+
+dependencies = [
+    "pdfplumber>=0.11,<1.0",
+    "pydantic>=2.6,<3.0",
+    "openpyxl>=3.1,<4.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+# Only needed to refresh the working dataset via scripts/download_dataset.py;
+# not required to install or run the tool itself.
+data = ["huggingface_hub>=0.20"]
+
+[project.scripts]
+invoice-tool = "invoice_intake_automation_tool.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
