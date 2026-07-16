@@ -1,0 +1,76 @@
+{
+  "invoice_id": "INV-2026-0004",
+  "vendor": "Vandelay Industries GmbH",
+  "vendor_country": "AT",
+  "vendor_address": {
+    "street": "Holunderried 4",
+    "postal_code": "1020",
+    "city": "Wien"
+  },
+  "recipient": "Mittelstand Digital Solutions GmbH",
+  "recipient_country": "DE",
+  "recipient_address": {
+    "street": "Kupferschmiedsweg 17",
+    "postal_code": "20354",
+    "city": "Hamburg"
+  },
+  "date": "2026-02-23",
+  "due_date": "2026-03-25",
+  "line_items": [
+    {
+      "description": "Legal opinion — cross-border financing",
+      "quantity": 1,
+      "unit_price": "6152.40",
+      "vat_rate": "0.20",
+      "amount": "6152.40"
+    },
+    {
+      "description": "Quarterly newsletter design",
+      "quantity": 1,
+      "unit_price": "13741.10",
+      "vat_rate": "0.20",
+      "amount": "13741.10"
+    },
+    {
+      "description": "Software licence renewal — 50 seats",
+      "quantity": 2,
+      "unit_price": "28410.10",
+      "vat_rate": "0.20",
+      "amount": "56820.20"
+    },
+    {
+      "description": "Strategic advisory — Q1 2026 (PowerPoints not included)",
+      "quantity": 3,
+      "unit_price": "36360.40",
+      "vat_rate": "0.20",
+      "amount": "109081.20"
+    }
+  ],
+  "subtotal": "185794.90",
+  "vat_rate": "0.20",
+  "vat_amount": "37158.98",
+  "discount": {
+    "type": "trade_terms",
+    "value": "0.02",
+    "applied_to": "subtotal",
+    "description": "2/10 net 30 — conditional early-payment discount",
+    "conditional": true
+  },
+  "discount_amount": "0.00",
+  "total": "222953.88",
+  "currency": "EUR",
+  "payment_terms": "2/10 net 30",
+  "bank_details": "Bank Austria | IBAN: AT88 1954 3276 2301 3199 | BIC: BKAUATWWXXX",
+  "variants": {
+    "vat_variant": "explicit_excluded",
+    "discount_variant": "trade_terms",
+    "number_format": "german",
+    "layout": "table",
+    "consistency": "total_error",
+    "edge_case": "none"
+  },
+  "rendered_subtotal": "185794.90",
+  "rendered_total": "218494.80",
+  "error_note": "Displayed total 218494.80 differs from true total 222953.88 by -4459.08 (-2.00%).",
+  "is_credit_note": false
+}

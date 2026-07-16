@@ -1,0 +1,90 @@
+{
+  "invoice_id": "INV-2026-0002",
+  "vendor": "ACME Laboratories International S.A.",
+  "vendor_country": "FR",
+  "vendor_address": {
+    "street": "5 cours Magnolia-Sèche",
+    "postal_code": "13100",
+    "city": "Aix-en-Provence"
+  },
+  "recipient": "Europäische Verwaltungskontor AG",
+  "recipient_country": "AT",
+  "recipient_address": {
+    "street": "Feldspatplatz 9",
+    "postal_code": "5020",
+    "city": "Salzburg"
+  },
+  "date": "2026-04-10",
+  "due_date": "2026-05-10",
+  "line_items": [
+    {
+      "description": "Travel expenses (London–Vienna)",
+      "quantity": 2,
+      "unit_price": "23279.90",
+      "vat_rate": "0.20",
+      "amount": "46559.80"
+    },
+    {
+      "description": "Executive workshop: 'AI Strategy'",
+      "quantity": 3,
+      "unit_price": "7734.30",
+      "vat_rate": "0.20",
+      "amount": "23202.90"
+    },
+    {
+      "description": "Travel expenses (Frankfurt–Zürich)",
+      "quantity": 1,
+      "unit_price": "47421.00",
+      "vat_rate": "0.20",
+      "amount": "47421.00"
+    },
+    {
+      "description": "Retainer fee — ongoing counsel",
+      "quantity": 10,
+      "unit_price": "457.30",
+      "vat_rate": "0.20",
+      "amount": "4573.00"
+    },
+    {
+      "description": "Cloud infrastructure migration — Phase 2 of 7 (estimated)",
+      "quantity": 1,
+      "unit_price": "944.00",
+      "vat_rate": "0.20",
+      "amount": "944.00"
+    },
+    {
+      "description": "Board meeting facilitation",
+      "quantity": 100,
+      "unit_price": "326.50",
+      "vat_rate": "0.20",
+      "amount": "32650.00"
+    }
+  ],
+  "subtotal": "155350.70",
+  "vat_rate": "0.20",
+  "vat_amount": "31070.14",
+  "discount": {
+    "type": "percentage",
+    "value": "0.02",
+    "applied_to": "subtotal",
+    "description": "early payment discount",
+    "conditional": false
+  },
+  "discount_amount": "3107.01",
+  "total": "183313.83",
+  "currency": "EUR",
+  "payment_terms": "Net 30 days",
+  "bank_details": "Crédit Agricole | IBAN: FR55 8722 1509 4529 1814 7560 769 | BIC: AGRIFRPPXXX",
+  "variants": {
+    "vat_variant": "implicit_no_rate",
+    "discount_variant": "explicit_percentage",
+    "number_format": "swiss",
+    "layout": "table",
+    "consistency": "total_error",
+    "edge_case": "none"
+  },
+  "rendered_subtotal": "155350.70",
+  "rendered_total": "188813.24",
+  "error_note": "Displayed total 188813.24 differs from true total 183313.83 by +5499.41 (+3.00%).",
+  "is_credit_note": false
+}

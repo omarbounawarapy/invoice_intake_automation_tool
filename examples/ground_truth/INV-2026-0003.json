@@ -1,0 +1,76 @@
+{
+  "invoice_id": "INV-2026-0003",
+  "vendor": "Pearson Hardman",
+  "vendor_country": "GB",
+  "vendor_address": {
+    "street": "25 Greywell Close",
+    "postal_code": "EC2R 6AA",
+    "city": "London"
+  },
+  "recipient": "Bergkristall Maschinenbau GmbH",
+  "recipient_country": "DE",
+  "recipient_address": {
+    "street": "Roggenfeldallee 42",
+    "postal_code": "60311",
+    "city": "Frankfurt am Main"
+  },
+  "date": "2026-04-11",
+  "due_date": "2026-05-11",
+  "line_items": [
+    {
+      "description": "Cloud infrastructure migration — Phase 2 of 7 (estimated)",
+      "quantity": 1,
+      "unit_price": "11402.00",
+      "vat_rate": "0.20",
+      "amount": "11402.00"
+    },
+    {
+      "description": "Database optimisation retainer — March",
+      "quantity": 100,
+      "unit_price": "368.70",
+      "vat_rate": "0.20",
+      "amount": "36870.00"
+    },
+    {
+      "description": "Retainer fee — ongoing counsel",
+      "quantity": 1,
+      "unit_price": "24079.00",
+      "vat_rate": "0.20",
+      "amount": "24079.00"
+    },
+    {
+      "description": "Board meeting facilitation",
+      "quantity": 2,
+      "unit_price": "5082.50",
+      "vat_rate": "0.20",
+      "amount": "10165.00"
+    }
+  ],
+  "subtotal": "82516.00",
+  "vat_rate": "0.20",
+  "vat_amount": "16503.20",
+  "discount": {
+    "type": "trade_terms",
+    "value": "0.02",
+    "applied_to": "subtotal",
+    "description": "2/10 net 30 — conditional early-payment discount",
+    "conditional": true
+  },
+  "discount_amount": "0.00",
+  "total": "99019.20",
+  "currency": "EUR",
+  "payment_terms": "2/10 net 30",
+  "bank_details": "HSBC UK | IBAN: GB61 0136 3964 9965 6502 82 | BIC: HBUKGB4BXXX",
+  "variants": {
+    "vat_variant": "explicit_excluded",
+    "discount_variant": "trade_terms",
+    "number_format": "swiss",
+    "layout": "mixed",
+    "consistency": "correct",
+    "edge_case": "none"
+  },
+  "rendered_subtotal": "82516.00",
+  "rendered_total": "99019.20",
+  "error_note": null,
+  "is_credit_note": false
+}

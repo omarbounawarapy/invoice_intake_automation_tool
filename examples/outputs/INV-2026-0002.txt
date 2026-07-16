@@ -1,0 +1,19 @@
+Invoice INV-2026-0002                                              TOTAL ERROR
+ACME Laboratories International S.A. (FR)  ->  Europäische Verwaltungskontor AG (AT)
+Date: 2026-04-10    Due: 2026-05-10    Currency: EUR
+------------------------------------------------------------------------------
+Line items
+  Travel expenses (London–Vienna)                    2 x 23,279.90 = 46,559.80
+  Executive workshop: 'AI Strategy'                   3 x 7,734.30 = 23,202.90
+  Travel expenses (Frankfurt–Zürich)                 1 x 47,421.00 = 47,421.00
+  Retainer fee — ongoing counsel                        10 x 457.30 = 4,573.00
+  Cloud infrastructure migration — Ph...                   1 x 944.00 = 944.00
+  Board meeting facilitation                          100 x 326.50 = 32,650.00
+------------------------------------------------------------------------------
+Subtotal:                                                       155,350.70 EUR
+Discount (2%):                                                   -3,107.01 EUR
+VAT (20%):                                                       31,070.14 EUR
+==============================================================================
+Total:                                                          183,313.83 EUR
+
+! Displayed total 188813.24 differs from computed total 183313.83 by +5499.41 (+3.00%).
