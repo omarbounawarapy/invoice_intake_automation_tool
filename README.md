@@ -1,422 +1,334 @@
 # Invoice Intake Automation Tool
 
-Python tool for turning heterogeneous invoice PDFs, CSV files, and Excel spreadsheets into a clean, validated dataset suitable for accounting or operational review.
+Extracts, normalizes, and validates structured data from semi-structured
+invoice PDFs, and exports it to **JSON, CSV, or Excel (XLSX)** through a
+single command-line tool.
 
-The project simulates a small-business automation job: invoice information arrives in different layouts and formats, staff currently clean it manually, and the client wants one repeatable command that produces a consistent spreadsheet plus a clear validation report.
+## The problem
 
-> **Scope:** this is a focused batch-processing utility, not a general document-processing framework.
+Invoices arrive as PDFs in inconsistent layouts -- some as neat tables,
+some as prose paragraphs, in different number formats (`1,234.56`,
+`1'234.56`, `1.234,56`), with discounts and VAT phrased a dozen different
+ways. Turning a folder of them into a spreadsheet you can actually work
+with is slow, repetitive, and error-prone by hand. This tool automates
+that: point it at a PDF (or a folder of them) and get back a typed,
+validated record with a predictable schema, ready for JSON, CSV, or
+Excel.
 
-## Problem
+## 30-second demo
 
-Small businesses often receive invoices from multiple suppliers with inconsistent layouts, column names, number formats, and date formats. Manual consolidation is repetitive and makes validation errors easy to miss.
-
-This tool provides a repeatable workflow:
-
-```text
-PDF / CSV / XLSX
-       |
-       v
-   Extraction
-       |
-       v
-  Normalization
-       |
-       v
- Schema validation
-       |
-       v
- Duplicate handling
-       |
-       v
-     Export
-   /    |     \
-  v     v      v
-CSV    XLSX   Report
+```bash
+invoice-tool extract examples/invoices/INV-2026-0001.pdf
 ```
 
-## Business Use Case
-
-A small construction or professional-services business receives supplier invoices every week. The administrative team needs a normalized table containing invoice and line-item information so it can be reviewed, filtered, reconciled, or imported into another workflow.
-
-The intended client request is deliberately small:
-
-> "Give me the invoice files we receive every week and produce one clean spreadsheet with the fields we care about. Tell me which records need attention instead of silently dropping them."
-
-## Supported Inputs
-
-The first version supports:
-
-- Digital/text PDF invoices
-- CSV supplier exports
-- XLSX supplier exports
-
-It intentionally does **not** support scanned documents or images.
-
-### Why there is no OCR
-
-The demonstration sources are digital documents with machine-readable content. Adding OCR would introduce a second extraction problem without improving the core portfolio signal. OCR can be added as a separate project when a real client requirement justifies it.
-
-## Canonical Output Schema
-
-The normalized dataset uses one row per invoice line.
-
-| Field | Description |
-|---|---|
-| `source_file` | Original input filename |
-| `invoice_number` | Supplier invoice identifier |
-| `invoice_date` | Normalized invoice date (`YYYY-MM-DD`) |
-| `due_date` | Normalized due date when available |
-| `supplier_name` | Supplier/vendor name |
-| `customer_name` | Customer/bill-to name |
-| `purchase_order` | Purchase-order reference when available |
-| `currency` | Currency code when available |
-| `line_number` | Invoice line number |
-| `description` | Original line-item description after whitespace cleanup |
-| `quantity` | Normalized numeric quantity |
-| `unit_price` | Normalized monetary value |
-| `line_total` | Normalized line amount |
-| `tax_amount` | Invoice tax amount when available |
-| `shipping_amount` | Shipping amount when available |
-| `subtotal` | Invoice subtotal when available |
-| `total_due` | Final invoice amount when available |
-| `validation_status` | `VALID` or `INVALID` |
-
-Values that are absent in the source remain missing. The tool does not invent business data such as `0`, `UNKNOWN`, or `N/A` merely to fill a blank field.
-
-## Normalization Rules
-
-### Dates
-
-Dates are converted to `YYYY-MM-DD` where the source provides an unambiguous value.
-
-Ambiguous or malformed dates are reported as validation errors rather than guessed.
-
-### Monetary values
-
-Common representations such as the following are normalized to a numeric monetary value:
-
-```text
-$1,250.00
-1,250.00
-1 250.00
-1250.00
+```
+Invoice INV-2026-0001                                                  CORRECT
+Praxis Consulting Group AG (AT)  ->  Bergkristall Maschinenbau GmbH (DE)
+Date: 2026-04-15    Due: 2026-05-15    Currency: EUR
+------------------------------------------------------------------------------
+Line items
+  Travel expenses (Frankfurt–Zürich)                 3 x 26,614.40 = 79,843.20
+  Software licence renewal — 50 seats                  1 x 9,583.60 = 9,583.60
+  Executive workshop (2 days)                          1 x 2,614.80 = 2,614.80
+  Hardware procurement — 4 workstations               3 x 9,834.20 = 29,502.60
+  Compliance audit preparation (regul...                50 x 185.70 = 9,285.00
+  Legal opinion — cross-border financing             1 x 46,646.20 = 46,646.20
+  Consulting hours — Senior Partner                  1 x 32,740.50 = 32,740.50
+------------------------------------------------------------------------------
+Subtotal:                                                       210,215.90 EUR
+Discount (2%):                                                   -4,204.32 EUR
+VAT (20%):                                                       42,043.18 EUR
+==============================================================================
+Total:                                                          248,054.76 EUR
 ```
 
-### Text
+Same invoice, machine-readable (`line_items` truncated to one entry below
+for length -- the real output has all seven):
 
-The normalizer removes surrounding whitespace, repeated whitespace, and line-break artifacts while preserving the meaning of the original description.
-
-### Column aliases
-
-Supplier spreadsheet headers such as `Qty`, `QTY`, and `quantity` are mapped to the canonical `quantity` field. The same approach is used for common date and amount aliases.
-
-## Validation Behavior
-
-Validation occurs after extraction and normalization.
-
-The tool checks, where applicable:
-
-- invoice number is present
-- invoice date is valid
-- line description is present
-- quantity is greater than zero
-- unit price is non-negative
-- line total is non-negative
-- `quantity × unit_price` agrees with `line_total` within a small currency tolerance
-- invoice totals are internally consistent when the source provides enough information
-
-A malformed file or record does not terminate the whole batch. It is reported and processing continues for the remaining inputs.
-
-## Duplicate Handling
-
-Duplicate line records are identified using the normalized invoice identity:
-
-```text
-(invoice_number, line_number, supplier_name)
+```bash
+invoice-tool extract examples/invoices/INV-2026-0001.pdf --format json
 ```
-
-Exact duplicates are kept once and reported in the processing summary. The tool does not silently aggregate duplicate business records.
-
-## Outputs
-
-A successful run produces the following artifacts:
-
-```text
-data/output/
-├── cleaned.csv
-├── cleaned.xlsx
-├── validation_report.json
-└── processing.log
-```
-
-### `cleaned.csv`
-
-The canonical one-row-per-invoice-line dataset. This is the simplest machine-readable output for downstream systems.
-
-### `cleaned.xlsx`
-
-A review-friendly workbook containing:
-
-- `invoice_lines` — normalized line-item records
-- `invoice_summary` — one row per invoice
-- `validation_issues` — records requiring attention
-
-### `validation_report.json`
-
-A machine-readable processing summary containing file counts, record counts, duplicate counts, and validation issues.
-
-Example:
 
 ```json
 {
-  "files_processed": 6,
-  "files_succeeded": 5,
-  "files_failed": 1,
-  "records_extracted": 42,
-  "valid_records": 39,
-  "invalid_records": 3,
-  "duplicates_removed": 2
+  "invoice_id": "INV-2026-0001",
+  "vendor": "Praxis Consulting Group AG",
+  "vendor_country": "AT",
+  "recipient": "Bergkristall Maschinenbau GmbH",
+  "recipient_country": "DE",
+  "invoice_date": "2026-04-15",
+  "due_date": "2026-05-15",
+  "currency": "EUR",
+  "line_items": [
+    {
+      "description": "Travel expenses (Frankfurt–Zürich)",
+      "quantity": "3",
+      "unit_price": "26614.40",
+      "amount": "79843.20",
+      "vat_rate": "0.20"
+    }
+  ],
+  "subtotal": "210215.90",
+  "discount_amount": "4204.32",
+  "vat_amount": "42043.18",
+  "total": "248054.76",
+  "consistency": "correct"
 }
 ```
 
-### `processing.log`
+And when a document's printed total doesn't actually match its own line
+items -- which happens on real invoices -- the tool says so instead of
+quietly reporting the wrong number:
 
-Operational log showing files processed, extraction results, validation failures, and unexpected errors.
+```bash
+invoice-tool extract examples/invoices/INV-2026-0002.pdf
+```
+
+```
+Invoice INV-2026-0002                                              TOTAL ERROR
+...
+Total:                                                          183,313.83 EUR
+
+! Displayed total 188813.24 differs from computed total 183313.83 by +5499.41 (+3.00%).
+```
+
+Every example above is real, reproducible output from this repository --
+not illustrative text. Run `pytest` and see `examples/README.md` and
+`examples/outputs/`.
+
+## Features
+
+* **PDF ingestion** -- table and paragraph invoice layouts, three number
+  formats (US/UK, Swiss, German)
+* **Structured field mining** -- invoice/date fields, parties, VAT,
+  discounts (percentage, flat amount, and conditional trade terms)
+* **Normalization** -- typed, `Decimal`-precise canonical records, not
+  floats or raw strings
+* **Validation** -- a typed Pydantic schema with structural and
+  cross-field business rules (see [Design decisions](#design-decisions))
+* **Reconciliation** -- computed totals are checked against what the
+  document actually prints, and disagreements are surfaced, not hidden
+* **JSON, CSV, and Excel (XLSX) output**, plus a readable terminal summary
+* **A real CLI** -- `invoice-tool extract` / `invoice-tool batch`, with
+  proper exit codes for scripting
+* **Automated tests** -- 200+ tests, including regression tests against
+  externally-sourced ground truth for every example invoice
+
+## Capability matrix
+
+| Capability | Status |
+| --- | --- |
+| Digital (text-layer) PDFs | Supported |
+| Table-layout invoices | Supported |
+| Paragraph-layout invoices | Supported |
+| US/UK, Swiss, and German number formats | Supported |
+| Percentage, flat-amount, and conditional (trade-terms) discounts | Supported |
+| VAT rate/amount derivation when only one is stated | Supported |
+| Total/subtotal reconciliation against the printed document | Supported |
+| JSON export | Supported |
+| CSV export | Supported |
+| Excel (XLSX) export, with a summary + line-items workbook | Supported |
+| Batch processing of a directory | Supported |
+| Scanned PDFs / OCR | Not supported |
+| Handwritten documents | Not supported |
+| Multi-page invoices | Not supported (first page only) |
+| Currencies other than EUR | Not reliably detected (see [Limitations](docs/limitations.md)) |
+| Full accounting/tax compliance | Not supported -- this is a normalization tool, not compliance software |
+
+## Architecture
+
+```
+PDF
+ |
+ v
+Ingestor            raw text/regions from the page
+ |
+ v
+Miner                semantic fields (still text)
+ |
+ v
+Transformer           typed values (Decimal, date), derives implicit VAT/discount figures
+ |
+ v
+Invoice model          validated canonical record (Pydantic)
+ |
+ v
+Serializer               JSON / CSV / XLSX / terminal text
+ |
+ v
+CLI                       invoice-tool
+```
+
+Each stage has one job and one failure mode (`IngestionError`,
+`MiningError`, `TransformationError`, `pydantic.ValidationError`) so a
+malformed document tells you which layer is responsible rather than
+producing a bare traceback. Full write-up in
+[`docs/architecture.md`](docs/architecture.md).
 
 ## Installation
 
-Requires Python 3.12 or newer.
-
-Create and activate a virtual environment:
+Requires Python 3.12+.
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-```
-
-Install the project:
-
-```bash
+git clone <this-repository>
+cd invoice-intake-automation-tool
 pip install -e .
 ```
 
-Install development dependencies when running the test suite:
+```bash
+invoice-tool --help
+```
+
+For development (running the test suite):
 
 ```bash
 pip install -e ".[dev]"
+pytest
 ```
 
 ## Usage
 
-Place input files in `data/input/` and run:
-
 ```bash
-python -m src.cli \
-    --input ./data/input \
-    --output ./data/output
+# Human-readable summary (default)
+invoice-tool extract invoice.pdf
+
+# Machine-readable formats
+invoice-tool extract invoice.pdf --format json
+invoice-tool extract invoice.pdf --format csv --output result.csv
+invoice-tool extract invoice.pdf --format xlsx --output result.xlsx
+
+# Exit non-zero if the invoice's totals don't reconcile (useful in CI/scripts)
+invoice-tool extract invoice.pdf --strict
+
+# Process every PDF in a folder
+invoice-tool batch ./invoices/
+invoice-tool batch ./invoices/ --format xlsx --output all_invoices.xlsx
 ```
 
-For a stricter CI-style run that returns a non-zero exit code when validation errors are present:
+Full command reference, flags, and exit codes:
+[`docs/cli.md`](docs/cli.md).
 
-```bash
-python -m src.cli \
-    --input ./data/input \
-    --output ./data/output \
-    --strict
+### As a library
+
+```python
+from invoice_intake_automation_tool import extract_invoice
+
+invoice = extract_invoice("invoice.pdf")
+print(invoice.total, invoice.consistency)
 ```
 
-## Example Run
+## Design decisions
 
-```text
-$ python -m src.cli --input ./data/input --output ./data/output
-
-Processing 6 files...
-
-invoice_smartsheet.pdf   8 lines   VALID
-invoice_gmu.pdf          5 lines   VALID
-invoice_georgia.pdf      3 lines   VALID
-supplier_export.xlsx    18 lines   VALID
-supplier_export.csv     12 lines   2 warnings
-malformed_invoice.pdf     0 lines   EXTRACTION_ERROR
-
-42 records extracted
-39 valid
-3 invalid
-2 duplicates removed
-
-Output written to ./data/output/
-```
-
-The values above illustrate the shape of the console output; they are not benchmark or dataset claims.
-
-## Architecture
-
-The application deliberately uses ordinary Python modules rather than a framework.
-
-```text
-src/
-└── invoice_normalizer/
-    ├── cli.py
-    ├── models.py
-    ├── extract.py
-    ├── normalize.py
-    ├── validate.py
-    ├── export.py
-    └── report.py
-```
-
-### `models.py`
-
-Defines the canonical invoice, invoice-line, validation-issue, and processing-result models.
-
-### `extract.py`
-
-Reads supported files and converts them into raw invoice records. PDF parsing is handled with `pdfplumber`; CSV/XLSX ingestion is handled with `pandas`.
-
-### `normalize.py`
-
-Maps source-specific values into the canonical schema and normalizes dates, amounts, whitespace, and common column aliases.
-
-### `validate.py`
-
-Applies business validation rules and returns explicit validation issues.
-
-### `export.py`
-
-Writes the normalized CSV and review-oriented Excel workbook.
-
-### `report.py`
-
-Produces the JSON processing summary and validation issue report.
-
-### `cli.py`
-
-Parses command-line arguments and orchestrates one batch run.
-
-There are intentionally no plugin registries, event buses, dependency-injection containers, abstract factories, or generic pipeline abstractions. The application is small enough that direct composition is clearer.
-
-## Technology Choices
-
-| Technology | Purpose |
-|---|---|
-| Python 3.12+ | Runtime and application code |
-| pandas | CSV/XLSX ingestion and tabular normalization |
-| pdfplumber | Text/table extraction from digital PDFs |
-| Pydantic | Explicit validation of the canonical data contract |
-| openpyxl | XLSX workbook generation through pandas |
-| pytest | Automated tests |
-| `logging` | Operational logging without another dependency |
+* **Extraction and semantic mining are separate stages** (`ingesting/` vs
+  `mining/`) so that "where is this text on the page" and "what does this
+  text mean" can be worked on, tested, and reasoned about independently.
+* **Normalization is a distinct stage from mining.** The mining layer
+  produces semantically-identified but still-textual values by design (its
+  own docstring states this contract); `transform.py` is solely
+  responsible for turning those into typed, computed values.
+* **The canonical `Invoice` model is the one public data contract.**
+  Everything upstream exists to produce one; everything downstream
+  (serializers, CLI) consumes one. Internal classes (ingesters, the
+  miner) are not part of the public API.
+* **`Decimal`, never `float`, for every monetary value** -- financial
+  arithmetic done in binary floating point silently loses cents.
+* **`subtotal` and `total` are computed fields, not stored input.** They
+  are defined as functions of `line_items` (and `discount_amount`/
+  `vat_amount`), so it is structurally impossible to construct an
+  `Invoice` whose total disagrees with its own line items. See
+  [`docs/data-model.md`](docs/data-model.md).
+* **Validation is separate from -- and stricter than -- reconciliation.**
+  A missing required field, a negative amount, or `due_date` before
+  `invoice_date` rejects the document (`pydantic.ValidationError`). A
+  printed total that doesn't match the computed one does *not* reject the
+  document -- it's a genuine, useful fact about a real invoice, reported
+  via `consistency`/`consistency_note` rather than hidden behind a
+  crash.
+* **A plain CLI over `argparse`, not a larger framework.** Two
+  subcommands and three flags don't need one; every dependency in this
+  project (`pdfplumber`, `pydantic`, `openpyxl`) earns its place doing
+  something the standard library can't.
 
 ## Testing
-
-Tests are designed around real failure modes rather than arbitrary coverage percentages.
-
-The suite covers:
-
-- normal PDF extraction
-- multi-page PDF extraction
-- CSV input
-- XLSX input
-- missing fields
-- malformed dates
-- malformed monetary values
-- invalid quantities
-- line-total mismatches
-- duplicate records
-- extraction failures
-- exact output columns
-- expected Excel workbook sheets
-- end-to-end extraction → normalization → validation → export
-
-Run the test suite with:
 
 ```bash
 pytest
 ```
 
-The tests should use small local fixtures and must not require network access.
+200+ tests across three layers:
 
-## Project Data
+* **Unit** (`tests/unit/`) -- every transformation function and
+  validation rule tested directly against representative format
+  variations and edge cases.
+* **Integration** (`tests/integration/`) -- the full pipeline wired
+  together, the CLI's commands and exit codes, and batch processing
+  (including a file that fails partway through a batch).
+* **Regression** (`tests/integration/test_regression.py`) -- every field
+  of every example invoice checked against externally-sourced ground
+  truth (`examples/ground_truth/`), not this codebase's own idea of the
+  right answer.
 
-The demonstration deliberately separates **real public source material** from **synthetic messy test cases**.
+## Example data
 
-## Project Data and Source Attribution
-
-The project uses the publicly available **InvoiceBenchmark** synthetic invoice dataset:
-
-https://huggingface.co/datasets/jngb-labs/InvoiceBenchmark
-
-The dataset provides synthetic invoice documents together with structured ground-truth records. The invoices contain fictional business and transaction information and are used solely to provide a reproducible corpus for extraction and validation testing.
-
-For this project, the PDF invoice files are treated as input data, while the accompanying ground-truth records are used as expected outputs for automated validation.
-
-The repository does not claim that the dataset represents real confidential business records. It is used as a controlled demonstration of a document-ingestion workflow that could be adapted to a client's actual invoice formats.
-
-Dataset contents are obtained from the original dataset source rather than being represented as proprietary or original project data. Users should consult the dataset repository for its current license, attribution requirements, and permitted uses.
-
-The repository may also contain small synthetic CSV/XLSX fixtures created specifically to test malformed values, missing fields, duplicate records, and normalization rules.
-
-
-### Synthetic test cases
-
-`data/synthetic/` contains deliberately modified examples derived from the public source material. These cases introduce controlled inconsistencies such as:
-
-- alternate column names
-- multiple date formats
-- currency symbols
-- whitespace variations
-- missing values
-- malformed numbers
-- duplicate rows
-- arithmetic mismatches
-
-Synthetic cases exist to exercise validation and error handling. They are not presented as real customer data.
-
-To retrieve the documented public source material when the downloader is implemented:
-
-```bash
-python scripts/download_dataset.py --output ./data/input
-```
+Five real (synthetic) invoices with externally-sourced reference values
+live in [`examples/`](examples/README.md), along with the real output
+this tool produces for each of them. See that file for provenance and a
+licensing note.
 
 ## Limitations
 
-This is intentionally a small batch-processing application.
+This is a normalization tool for structured, text-based PDFs -- not OCR,
+not accounting/compliance software, not a guarantee of perfect
+extraction. Full, honest accounting of what it does and doesn't handle:
+[`docs/limitations.md`](docs/limitations.md).
 
-It does not currently provide:
+## Freelance use case
 
-- OCR for scanned documents
-- image/PDF handwriting recognition
-- LLM-based extraction
-- accounting-system API integration
-- database persistence
-- web UI
-- background job scheduling
-- cloud deployment
-- arbitrary invoice-template discovery
+If you have a folder of vendor invoice PDFs and need them as structured
+data -- for a spreadsheet, an accounts-payable import, or feeding another
+system -- this tool turns that into one command:
 
-The PDF extraction logic is designed for the documented demonstration layouts, not for every invoice format in existence. A real client engagement would expand the supported layouts only as concrete requirements justify it.
+```bash
+invoice-tool batch ./client_invoices/ --format xlsx --output invoices.xlsx
+```
 
-## What This Project Demonstrates
+It won't handle scanned documents or replace an accountant's judgment
+call on an ambiguous line item, but for consistent, text-based PDF
+invoices it removes the manual transcription step and flags documents
+worth a second look via `consistency`.
 
-This project is designed to demonstrate practical freelance engineering rather than maximum technical complexity.
+## Project snapshot
 
-It shows that the engineer can:
+* Python 3.12+
+* Typed, validated canonical invoice model (Pydantic)
+* JSON, CSV, and Excel (XLSX) output, plus a readable terminal summary
+* `invoice-tool` CLI with `extract` and `batch` commands
+* 200+ automated tests, including regression tests against externally
+  sourced ground truth
+* Three dependencies: `pdfplumber`, `pydantic`, `openpyxl`
 
-- take heterogeneous real-world business documents
-- extract structured information from them
-- normalize inconsistent representations
-- define and enforce a stable output schema
-- validate business rules
-- handle malformed records without losing the whole batch
-- produce both machine-readable and human-reviewable outputs
-- provide useful operational logging
-- write tests around failure modes
-- document a repeatable client-facing workflow
+## Documentation
 
-The intended portfolio signal is simple:
+* [`docs/architecture.md`](docs/architecture.md) -- component boundaries and data flow
+* [`docs/data-model.md`](docs/data-model.md) -- the canonical schema, field by field
+* [`docs/pipeline.md`](docs/pipeline.md) -- ingest → mine → transform → validate → serialize, and where each failure type comes from
+* [`docs/cli.md`](docs/cli.md) -- full command reference
+* [`docs/limitations.md`](docs/limitations.md) -- honest scope boundaries
 
-> **Give me messy business input and a desired output schema, and I can turn it into a reliable, repeatable data-processing tool.**
+## Future improvements
+
+Realistic, not aspirational:
+
+* Structured IBAN/BIC fields (the mining layer already parses these
+  internally; only the public output would need to change -- see
+  `docs/data-model.md`)
+* Currency detection beyond EUR
+* Multi-page invoice support
+* An OCR pre-processing step for scanned documents (a genuinely separate
+  concern from this project's current text-layer-only scope)
 
 ## License
 
-This project's source code is released under the Apache License 2.0. Source documents referenced in the dataset section remain subject to their respective publishers' terms and are not relicensed by this repository.
+Apache License 2.0 -- see [`LICENSE`](LICENSE). Example invoice data is
+synthetic; see [`examples/README.md`](examples/README.md) for its
+provenance and a licensing caveat.
