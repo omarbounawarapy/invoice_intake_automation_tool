@@ -15,7 +15,18 @@ that: point it at a PDF (or a folder of them) and get back a typed,
 validated record with a predictable schema, ready for JSON, CSV, or
 Excel.
 
+
+
+
+
 ## 30-second demo
+
+<video width="100%" controls preload="metadata">
+  <source src="./assets/demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
+
 
 ```bash
 invoice-tool extract examples/invoices/INV-2026-0001.pdf
