@@ -375,7 +375,7 @@ Synthetic cases exist to exercise validation and error handling. They are not pr
 To retrieve the documented public source material when the downloader is implemented:
 
 ```bash
-python scripts/download_sources.py --output ./data/input
+python scripts/download_dataset.py --output ./data/input
 ```
 
 ## Limitations
