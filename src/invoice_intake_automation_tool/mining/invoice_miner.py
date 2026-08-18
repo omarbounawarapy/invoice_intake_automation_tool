@@ -1,15 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, is_dataclass
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Optional
-
-from .invoice import Invoice
-from .lineitem import LineItem
-from .discount import Discount
-from .address import Address
 
 
 class InvoiceMiningError(ValueError):
@@ -17,526 +9,636 @@ class InvoiceMiningError(ValueError):
 
 
 class InvoiceMiner:
-    """Mine normalized invoice semantics from the raw extraction produced by the ingesters.
+    """
+    Mine semantic information from the raw invoice extraction.
 
-    The extractor is intentionally dumb: it preserves text/geometry-derived strings.
-    This class interprets those strings using deterministic pattern dictionaries.
+    Contract:
+    - returns only dicts/lists/scalars
+    - never constructs domain dataclasses
+    - never creates Decimal/int/date objects
+    - monetary values are returned as normalized strings
+    - dates are returned as ISO strings
+    - no arithmetic / validation / reconciliation
     """
 
-    # The pattern dictionaries are the main semantic rule surface.
-    PATTERNS: dict[str, list[dict[str, Any]]] = {
-        "vat": [
-            {
-                "name": "reverse_charge",
-                "regex": r"reverse\s+charge\s+mechanism",
-                "meta": {"vat": True, "type": "reverse_charge", "rate_source": "none"},
-            },
-            {
-                "name": "mixed_rates",
-                "regex": r"mixed\s+rates?",
-                "meta": {"vat": True, "type": "mixed", "rate_source": "multiple"},
-            },
-            {
-                "name": "included",
-                "regex": r"(?:all\s+prices\s+include|subtotal\s+\(incl\.\s*vat\)|including\s+vat)",
-                "meta": {"vat": True, "type": "included", "rate_source": "percentage"},
-            },
-            {
-                "name": "percentage",
-                "regex": r"(?:vat|statutory\s+vat|plus\s+\d+%\s+vat|vat\s*\(\d+(?:[.,]\d+)?%\))?.*?(?P<rate>\d+(?:[.,]\d+)?)\s*%",
-                "meta": {"vat": True, "type": "percentage", "rate_source": "percentage"},
-            },
-            {
-                "name": "applies_without_rate",
-                "regex": r"(?:vat|statutory\s+vat)\s+applies",
-                "meta": {"vat": True, "type": "applies", "rate_source": "unknown"},
-            },
-        ],
-        "discount": [
-            {
-                "name": "early_percentage",
-                "regex": r"(?:discount|less).*?(?P<rate>\d+(?:[.,]\d+)?)\s*%.*?(?:-?\s*(?:eur\s*)?(?P<amount>\d[\d'.,]*))",
-                "meta": {"discount": True, "type": "percentage", "conditional": True},
-            },
-            {
-                "name": "rebate_amount",
-                "regex": r"(?:less|discount).*?(?:rebate|agreed rebate).*?(?:-\s*)?(?:eur\s*)?(?P<amount>\d[\d'.,]*)",
-                "meta": {"discount": True, "type": "rebate", "conditional": False},
-            },
-            {
-                "name": "rebate_per_agreement",
-                "regex": r"less:\s*rebate\s+per\s+agreement:\s*-?\s*(?:eur\s*)?(?P<amount>\d[\d'.,]*)",
-                "meta": {"discount": True, "type": "rebate", "conditional": False},
-            },
-            {
-                "name": "generic_percentage",
-                "regex": r"(?:discount|less).*?(?P<rate>\d+(?:[.,]\d+)?)\s*%",
-                "meta": {"discount": True, "type": "percentage", "conditional": True},
-            },
-        ],
-    }
-
     COUNTRY_FROM_IBAN = {
-        "AT": "Austria",
-        "DE": "Germany",
-        "GB": "United Kingdom",
-        "FR": "France",
-        "CH": "Switzerland",
-        "NL": "Netherlands",
-        "NO": "Norway",
-        "ES": "Spain",
-        "EE": "Estonia",
+        "AT": "AT",
+        "DE": "DE",
+        "GB": "GB",
+        "FR": "FR",
+        "CH": "CH",
+        "NL": "NL",
+        "NO": "NO",
+        "ES": "ES",
+        "EE": "EE",
     }
 
-    COUNTRY_NAMES = tuple(COUNTRY_FROM_IBAN.values())
+    MONTHS = {
+        "january": "01", "february": "02", "march": "03", "april": "04",
+        "may": "05", "june": "06", "july": "07", "august": "08",
+        "september": "09", "october": "10", "november": "11", "december": "12",
+    }
 
-    def mine(self, raw: dict[str, Any]) -> Invoice:
-        header = self._parse_header(raw["header"])
-        bank = self._parse_bank(raw.get("bank"))
+    VAT_PATTERNS = {
+        "reverse_charge": re.compile(r"reverse\s+charge\s+mechanism", re.I),
+        "mixed": re.compile(r"mixed\s+rates?", re.I),
+        "included": re.compile(
+            r"all\s+prices\s+include|subtotal\s*\(\s*incl\.\s*vat\s*\)|subtotal\s+including\s+vat",
+            re.I,
+        ),
+        "applies": re.compile(r"(?:statutory\s+)?vat\s+applies", re.I),
+    }
+
+    DISCOUNT_PATTERNS = {
+        "percentage": re.compile(
+            r"(?:discount|less).*?(?P<rate>\d+(?:[.,]\d+)?)\s*%",
+            re.I,
+        ),
+        "rebate": re.compile(
+            r"(?:rebate\s+per\s+agreement|agreed\s+rebate|rebate)",
+            re.I,
+        ),
+    }
+
+    def mine(self, raw: dict[str, Any]) -> dict[str, Any]:
+        header = self._mine_header(raw.get("header", []))
+        recipient = self._mine_recipient(raw.get("bill_to", []))
+        bank = self._mine_bank(raw.get("bank"))
+
+        vat = self._mine_vat(raw.get("vat", []), raw.get("subtotal", ""))
+        discount = self._mine_discount(raw.get("discount"), raw.get("terms", ""))
+
+        line_items = [
+            self._mine_line_item(item, vat["rate"])
+            for item in raw.get("items", [])
+        ]
+
         number_format = self._detect_number_format(raw)
-
-        line_items = [self._parse_line_item(item, number_format) for item in raw.get("items", [])]
-        item_subtotal = sum((item.amount for item in line_items), Decimal("0.00"))
-
-        vat_info = self._mine_vat(raw.get("vat", []), raw.get("subtotal", ""))
-        discount_info = self._mine_discount(raw.get("discount"))
-
-        # Canonical monetary semantics are derived from the actual line items and
-        # explicit VAT/discount semantics, not blindly copied from rendered strings.
-        canonical_subtotal, canonical_vat = self._canonical_tax_values(
-            item_subtotal=item_subtotal,
-            vat_info=vat_info,
-            rendered_subtotal=raw.get("subtotal", ""),
-            line_items=line_items,
-        )
-
-        discount_amount = (
-            discount_info["amount"]
-            if discount_info["matched"] and not discount_info["conditional"]
-            else Decimal("0.00")
-        )
-        canonical_total = canonical_subtotal + canonical_vat - discount_amount
-
-        rendered_subtotal = self._extract_money(raw.get("subtotal", ""), number_format)
-        rendered_total = self._extract_money(raw.get("total", ""), number_format)
-
-        consistency = self._consistency(
-            canonical_subtotal=canonical_subtotal,
-            canonical_vat=canonical_vat,
-            canonical_total=canonical_total,
-            rendered_subtotal=rendered_subtotal,
-            rendered_total=rendered_total,
-            discount=discount_info,
-        )
-
-        edge_case = self._edge_case(raw, vat_info, discount_info)
-
-        return Invoice(
-            invoice_id=header["invoice_id"],
-            vendor_name=header["vendor_name"],
-            vendor_country=self._infer_vendor_country(bank["iban"]),
-            vendor_address=header["vendor_address"],
-            recipient_name=raw["bill_to"][0],
-            recipient_country=self._country_from_address(raw["bill_to"][-1]),
-            recipient_address=self._parse_recipient_address(raw["bill_to"]),
-            date=header["date"],
-            due_date=header["due_date"],
-            line_items=line_items,
-            vat_rate=vat_info["rate"] if vat_info["type"] == "percentage" else None,
-            subtotal=canonical_subtotal,
-            vat_amount=canonical_vat,
-            discount=discount_info["object"],
-            discount_amount=discount_amount,
-            total=canonical_total,
-            currency=self._currency(raw),
-            payment_terms=self._normalize_payment_terms(raw.get("terms", "")),
-            bank_name=bank["bank_name"],
-            bic=bank["bic"],
-            iban=bank["iban"],
-            vat_variant=vat_info["type"],
-            discount_variant=discount_info["type"],
-            number_format=number_format,
-            layout=raw["layout"],
-            consistency=consistency,
-            edge_case=edge_case,
-            rendered_subtotal=rendered_subtotal,
-            rendered_total=rendered_total,
-            error_note=self._error_note(consistency, raw, canonical_total, rendered_total),
-        )
-
-    # ------------------------------ header ------------------------------
-
-    def _parse_header(self, header: list[str]) -> dict[str, Any]:
-        invoice_match = re.search(r"(?P<vendor>.+?)\s+(?:Invoice|Credit\s+Note)\s+No:\s*(?P<id>[A-Z0-9-]+)", " ".join(header), re.I)
-        if not invoice_match:
-            raise InvoiceMiningError(f"Cannot parse invoice header: {header!r}")
-
-        combined = " ".join(header)
-        date_match = re.search(r"Date:\s*(?P<date>\d{1,2}\s+[A-Za-z]+\s+\d{4})", combined, re.I)
-        due_match = re.search(r"Due:\s*(?P<date>\d{1,2}\s+[A-Za-z]+\s+\d{4})", combined, re.I)
-
-        if not date_match:
-            raise InvoiceMiningError(f"Invoice date missing: {header!r}")
-
-        vendor_address = self._parse_vendor_address(header)
+        rendered_subtotal = self._extract_money_string(raw.get("subtotal", ""), number_format)
+        rendered_total = self._extract_money_string(raw.get("total", ""), number_format)
 
         return {
-            "vendor_name": invoice_match.group("vendor").strip(),
-            "invoice_id": invoice_match.group("id").strip(),
-            "date": self._parse_date(date_match.group("date")),
-            "due_date": self._parse_date(due_match.group("date")) if due_match else None,
-            "vendor_address": vendor_address,
+            "invoice_id": header["invoice_id"],
+            "vendor": header["vendor"],
+            "vendor_country": bank["country"],
+            "vendor_address": header["vendor_address"],
+            "recipient": recipient["recipient"],
+            "recipient_country": recipient["recipient_country"],
+            "recipient_address": recipient["recipient_address"],
+            "date": header["date"],
+            "due_date": header["due_date"],
+            "line_items": line_items,
+            "subtotal": rendered_subtotal,
+            "vat_rate": vat["rate"],
+            "vat_amount": vat["amount"],
+            "discount": discount,
+            "discount_amount": self._mine_discount_amount(raw.get("discount"), number_format, discount),
+            "total": rendered_total,
+            "currency": self._mine_currency(raw),
+            "payment_terms": self._mine_payment_terms(raw.get("terms")),
+            "bank_details": self._mine_bank_details(raw.get("bank")),
+            "variants": {
+                "vat_variant": vat["variant"],
+                "discount_variant": discount["type"] if discount else "none",
+                "number_format": number_format,
+                "layout": raw.get("layout"),
+                # Deliberately not validated here.
+                "consistency": None,
+                "edge_case": self._mine_edge_case(raw, vat, discount),
+            },
+            "rendered_subtotal": rendered_subtotal,
+            "rendered_total": rendered_total,
+            "error_note": None,
+            "is_credit_note": self._is_credit_note(raw.get("header", [])),
         }
 
-    def _parse_vendor_address(self, header: list[str]) -> Address:
-        # Normal invoice:
-        #   header[1] = street + Date
-        #   header[2] = postal/city + Due
-        # Credit note extraction in the dataset has only the street/date line.
+    # ------------------------------------------------------------------
+    # Header / address
+    # ------------------------------------------------------------------
+
+    def _mine_header(self, header: list[str]) -> dict[str, Any]:
         combined = " ".join(header)
-        date_pos = next((i for i, line in enumerate(header) if re.search(r"\bDate:", line, re.I)), None)
-        if date_pos is None:
+        is_credit_note = self._is_credit_note(header)
+
+        pattern = (
+            r"(?:CREDIT\s+NOTE\s+)?"
+            r"(?P<vendor>.+?)\s+"
+            r"(?:Invoice|Credit\s+Note)\s+No:\s*"
+            r"(?P<invoice_id>[A-Z0-9-]+)"
+        )
+        match = re.search(pattern, combined, re.I)
+        if not match:
+            raise InvoiceMiningError(f"Cannot mine invoice header: {header!r}")
+
+        vendor = match.group("vendor").strip()
+        vendor = re.sub(r"^CREDIT\s+NOTE\s+", "", vendor, flags=re.I).strip()
+
+        date_match = re.search(r"Date:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})", combined, re.I)
+        due_match = re.search(r"Due:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})", combined, re.I)
+
+        if not date_match:
+            raise InvoiceMiningError(f"Date missing from header: {header!r}")
+
+        return {
+            "invoice_id": match.group("invoice_id").strip(),
+            "vendor": vendor,
+            "date": self._date_string(date_match.group(1)),
+            "due_date": self._date_string(due_match.group(1)) if due_match else None,
+            "vendor_address": self._mine_vendor_address(header),
+        }
+
+    def _mine_vendor_address(self, header: list[str]) -> dict[str, str]:
+        date_index = next(
+            (i for i, line in enumerate(header) if re.search(r"\bDate:", line, re.I)),
+            None,
+        )
+        if date_index is None:
             raise InvoiceMiningError(f"Vendor address missing: {header!r}")
 
-        m1 = re.search(r"^(.*?)\s+Date:\s*", header[date_pos])
-        if not m1:
+        street_match = re.search(r"^(.*?)\s+Date:", header[date_index], re.I)
+        if not street_match:
             raise InvoiceMiningError(f"Vendor street missing: {header!r}")
-        street = m1.group(1).strip()
 
-        due_pos = next((i for i, line in enumerate(header) if re.search(r"\bDue:", line, re.I)), None)
-        if due_pos is None:
-            return Address(street=street, postal_code="", city="")
+        street = street_match.group(1).strip()
 
-        m2 = re.search(r"^(.*?)\s+Due:\s*", header[due_pos])
-        if not m2:
-            return Address(street=street, postal_code="", city="")
-        postal, city = self._split_postal_city(m2.group(1).strip())
-        return Address(street=street, postal_code=postal, city=city)
+        due_index = next(
+            (i for i, line in enumerate(header) if re.search(r"\bDue:", line, re.I)),
+            None,
+        )
+        if due_index is None:
+            return {"street": street, "postal_code": "", "city": ""}
 
-    def _parse_recipient_address(self, bill_to: list[str]) -> Address:
+        location_match = re.search(r"^(.*?)\s+Due:", header[due_index], re.I)
+        if not location_match:
+            return {"street": street, "postal_code": "", "city": ""}
+
+        postal, city = self._split_postal_city(location_match.group(1).strip())
+        return {"street": street, "postal_code": postal, "city": city}
+
+    def _mine_recipient(self, bill_to: list[str]) -> dict[str, Any]:
         if len(bill_to) < 3:
             raise InvoiceMiningError(f"Recipient address incomplete: {bill_to!r}")
-        postal, city = self._split_postal_city(bill_to[2])
-        return Address(street=bill_to[1], postal_code=postal, city=city)
+
+        postal, city_country = self._split_postal_city(bill_to[2])
+        city, country = self._split_city_country(city_country)
+
+        return {
+            "recipient": bill_to[0].strip(),
+            "recipient_country": self._country_code(country),
+            "recipient_address": {
+                "street": bill_to[1].strip(),
+                "postal_code": postal,
+                "city": city,
+            },
+        }
 
     @staticmethod
     def _split_postal_city(value: str) -> tuple[str, str]:
-        m = re.match(r"^(?P<postal>[A-Z0-9-]+)\s+(?P<city>.+)$", value.strip())
-        if not m:
-            raise InvoiceMiningError(f"Cannot split postal/city: {value!r}")
-        return m.group("postal"), m.group("city").strip()
+        value = value.strip()
+
+        # UK: EC2R 6AA London
+        uk = re.match(r"^(?P<postal>[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\s+(?P<city>.+)$", value, re.I)
+        if uk:
+            return uk.group("postal").upper(), uk.group("city").strip()
+
+        # NL: 1017 BP Amsterdam
+        nl = re.match(r"^(?P<postal>\d{4}\s+[A-Z]{2})\s+(?P<city>.+)$", value, re.I)
+        if nl:
+            return nl.group("postal").upper(), nl.group("city").strip()
+
+        # Generic numeric/postal token.
+        generic = re.match(r"^(?P<postal>[A-Z0-9-]+)\s+(?P<city>.+)$", value)
+        if generic:
+            return generic.group("postal"), generic.group("city").strip()
+
+        raise InvoiceMiningError(f"Cannot split postal/city: {value!r}")
 
     @staticmethod
-    def _parse_date(value: str) -> date:
-        return datetime.strptime(value, "%d %B %Y").date()
+    def _split_city_country(value: str) -> tuple[str, str]:
+        if "," not in value:
+            return value.strip(), ""
+        city, country = value.rsplit(",", 1)
+        return city.strip(), country.strip()
 
-    # ------------------------------ line items ------------------------------
+    def _country_code(self, country_name: str) -> Optional[str]:
+        normalized = country_name.strip().lower()
+        mapping = {
+            "austria": "AT",
+            "germany": "DE",
+            "united kingdom": "GB",
+            "france": "FR",
+            "switzerland": "CH",
+            "netherlands": "NL",
+            "norway": "NO",
+            "spain": "ES",
+            "estonia": "EE",
+        }
+        return mapping.get(normalized)
 
-    def _parse_line_item(self, raw: Any, number_format: str) -> LineItem:
+    @staticmethod
+    def _date_string(value: str) -> str:
+        match = re.fullmatch(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", value.strip())
+        if not match:
+            raise InvoiceMiningError(f"Invalid date text: {value!r}")
+        day = int(match.group(1))
+        month = InvoiceMiner.MONTHS.get(match.group(2).lower())
+        if not month:
+            raise InvoiceMiningError(f"Unknown month: {value!r}")
+        return f"{match.group(3)}-{month}-{day:02d}"
+
+    # ------------------------------------------------------------------
+    # Line items
+    # ------------------------------------------------------------------
+
+    def _mine_line_item(self, raw: Any, invoice_vat_rate: Optional[str]) -> dict[str, str]:
         if isinstance(raw, dict):
-            return LineItem(
-                description=self._clean_description(raw["Description"]),
-                quantity=self._parse_decimal(raw["Qty"], number_format),
-                unit_price=self._parse_decimal(raw["Unit Price"], number_format),
-                amount=self._parse_decimal(raw["Amount"], number_format),
-            )
+            description = self._clean_description(str(raw.get("Description", "")))
+            return {
+                "description": description,
+                "quantity": self._normalize_quantity(str(raw.get("Qty", ""))),
+                "unit_price": self._normalize_number(str(raw.get("Unit Price", ""))),
+                "vat_rate": invoice_vat_rate,
+                "amount": self._normalize_number(str(raw.get("Amount", ""))),
+            }
 
         if isinstance(raw, str):
-            return self._parse_paragraph_item(raw, number_format)
-
-        raise InvoiceMiningError(f"Unsupported line item type: {type(raw).__name__}")
-
-    def _parse_paragraph_item(self, raw: str, number_format: str) -> LineItem:
-        text = raw.strip()
-        text = re.sub(r"^«\s*", "", text)
-
-        # qty × unit = amount
-        m = re.search(
-            r"^(?P<description>.*?):\s*(?P<qty>\d+(?:[.,]\d+)?)\s*[×x]\s*(?:EUR\s*)?(?P<unit>-?[\d'.,]+)\s*(?:EUR\s*)?=\s*(?:EUR\s*)?(?P<amount>-?[\d'.,]+)\s*(?:EUR)?\.?$",
-            text, re.I,
-        )
-        if m:
-            return LineItem(
-                description=self._clean_description(m.group("description")),
-                quantity=self._parse_decimal(m.group("qty"), self._detect_number_format_from_number(m.group("qty"))),
-                unit_price=self._parse_decimal(m.group("unit"), self._detect_number_format_from_number(m.group("unit"))),
-                amount=self._parse_decimal(m.group("amount"), self._detect_number_format_from_number(m.group("amount"))),
-            )
-
-        # we invoice amount -> implicit quantity 1 and unit price = amount
-        m = re.search(
-            r"^(?:For\s+)?(?P<description>.*?),?\s+we\s+invoice\s+(?:EUR\s*)?(?P<amount>-?[\d'.,]+)\s*(?:EUR)?\.?$",
-            text, re.I,
-        )
-        if m:
-            amount = self._parse_decimal(m.group("amount"), self._detect_number_format_from_number(m.group("amount")))
-            return LineItem(
-                description=self._clean_description(m.group("description").rstrip(",")),
-                quantity=Decimal("1"),
-                unit_price=amount,
-                amount=amount,
-            )
-
-        raise InvoiceMiningError(f"Cannot parse paragraph line item: {raw!r}")
-
-    @staticmethod
-    def _clean_description(description: str) -> str:
-        # Extraction artefacts are not semantic item text.
-        description = re.sub(r"\s+(?:Statutory VAT.*|Net prices\. Statutory VAT.*|All prices include .*?VAT\.|VAT reverse charge mechanism.*)$", "", description, flags=re.I)
-        description = description.rstrip(" «")
-        return description.strip()
-
-    # ------------------------------ VAT ------------------------------
-
-    def _mine_vat(self, values: list[str], subtotal_text: str) -> dict[str, Any]:
-        text = " ".join([*values, subtotal_text]).strip()
-        info = {"matched": False, "vat": False, "type": "none", "rate": None, "amount": Decimal("0.00"), "rates": []}
-
-        for rule in self.PATTERNS["vat"]:
-            m = re.search(rule["regex"], text, re.I)
-            if not m:
-                continue
-            info.update(rule["meta"])
-            info["matched"] = True
-            if "rate" in m.groupdict() and m.group("rate"):
-                info["rate"] = self._percent(m.group("rate"))
-            break
-
-        # Extract every explicit VAT rate/amount pair, especially for mixed VAT.
-        for m in re.finditer(r"VAT\s*\((?P<rate>\d+(?:[.,]\d+)?)%\).*?(?P<amount>\d[\d'.,]*)\s*EUR", text, re.I):
-            info["rates"].append((self._percent(m.group("rate")), self._parse_decimal(m.group("amount"), self._detect_number_format_from_number(m.group("amount")))))
-
-        if len(info["rates"]) > 1:
-            info["type"] = "mixed"
-            info["rate"] = None
-        else:
-            generic_rate = re.search(r"(?<![\d.])(\d+(?:[.,]\d+)?)\s*%", text)
-            if generic_rate:
-                info["rate"] = self._percent(generic_rate.group(1))
-                if info["type"] in {"none", "applies", "included"}:
-                    info["type"] = "percentage" if info["type"] != "included" else "included"
-            elif len(info["rates"]) == 1:
-                info["rate"] = info["rates"][0][0]
-                if info["type"] in {"none", "applies"}:
-                    info["type"] = "percentage"
-
-        amount_matches = re.findall(r"(?:VAT[^\d]*|VAT\s*\([^)]*\)[^\d]*)\s*(?:EUR\s*)?(?P<amount>\d[\d'.,]*)", text, re.I)
-        if amount_matches:
-            try:
-                info["amount"] = self._parse_decimal(amount_matches[-1], self._detect_number_format_from_number(amount_matches[-1]))
-            except InvoiceMiningError:
-                pass
-
-        return info
-
-    # ------------------------------ discounts ------------------------------
-
-    def _mine_discount(self, value: Optional[str]) -> dict[str, Any]:
-        result = {
-            "matched": False,
-            "type": "none",
-            "rate": None,
-            "amount": Decimal("0.00"),
-            "conditional": False,
-            "object": None,
-        }
-        if not value:
+            result = self._mine_paragraph_item(raw)
+            result["vat_rate"] = invoice_vat_rate
             return result
 
-        for rule in self.PATTERNS["discount"]:
-            m = re.search(rule["regex"], value, re.I)
-            if not m:
-                continue
-            result.update(rule["meta"])
-            result["matched"] = True
-            if m.groupdict().get("rate"):
-                result["rate"] = self._percent(m.group("rate"))
-            if m.groupdict().get("amount"):
-                result["amount"] = self._parse_decimal(m.group("amount"), self._detect_number_format_from_number(m.group("amount")))
-            break
+        raise InvoiceMiningError(f"Unsupported line item: {raw!r}")
 
-        # Construct the user's Discount dataclass. Adjust field names here if its
-        # definition differs; the mining semantics remain the same.
-        if result["matched"]:
-            result["object"] = Discount(
-                type=result["type"],
-                rate=result["rate"],
-                amount=result["amount"],
-                conditional=result["conditional"],
-            )
-        return result
+    def _mine_paragraph_item(self, raw: str) -> dict[str, str]:
+        text = re.sub(r"^«\s*", "", raw.strip())
 
-    # ------------------------------ money / formats ------------------------------
+        # description: qty × unit = amount
+        match = re.search(
+            r"^(?P<description>.*?):\s*"
+            r"(?P<quantity>\d+(?:[.,]\d+)?)\s*[×x]\s*"
+            r"(?:EUR\s*)?(?P<unit>-?[\d'.,]+)\s*"
+            r"(?:EUR\s*)?=\s*(?:EUR\s*)?(?P<amount>-?[\d'.,]+)\s*(?:EUR)?\.?$",
+            text,
+            re.I,
+        )
+        if match:
+            return {
+                "description": self._clean_description(match.group("description")),
+                "quantity": self._normalize_quantity(match.group("quantity")),
+                "unit_price": self._normalize_number(match.group("unit")),
+                "amount": self._normalize_number(match.group("amount")),
+            }
+
+        # For description, we invoice amount.
+        match = re.search(
+            r"^(?:For\s+)?(?P<description>.*?),?\s+we\s+invoice\s+"
+            r"(?:EUR\s*)?(?P<amount>-?[\d'.,]+)\s*(?:EUR)?\.?$",
+            text,
+            re.I,
+        )
+        if match:
+            return {
+                "description": self._clean_description(match.group("description").rstrip(",")),
+                "amount": self._normalize_number(match.group("amount")),
+            }
+
+        raise InvoiceMiningError(f"Cannot mine paragraph line item: {raw!r}")
+
+    # ------------------------------------------------------------------
+    # VAT
+    # ------------------------------------------------------------------
+
+    def _mine_vat(self, values: list[str], subtotal: str) -> dict[str, Any]:
+        text = " ".join(str(v) for v in values if v)
+        rates = self._extract_percentages(text)
+        amounts = self._extract_vat_amounts(text)
+
+        if self.VAT_PATTERNS["reverse_charge"].search(text):
+            variant = "reverse_charge"
+        elif self.VAT_PATTERNS["mixed"].search(text) or len(set(rates)) > 1:
+            variant = "mixed"
+        elif self.VAT_PATTERNS["included"].search(text):
+            variant = "included"
+        elif rates:
+            variant = "explicit_excluded"
+        elif self.VAT_PATTERNS["applies"].search(text):
+            variant = "applies"
+        elif amounts:
+            variant = "explicit_excluded"
+        else:
+            variant = "none"
+
+        rate = rates[0] if len(set(rates)) == 1 and variant != "mixed" else None
+        amount = amounts[0] if len(amounts) == 1 else None
+
+        return {
+            "variant": variant,
+            "rate": rate,
+            "rates": self._unique(rates),
+            "amount": amount,
+            "amounts": self._unique(amounts),
+        }
+
+    @staticmethod
+    def _extract_percentages(text: str) -> list[str]:
+        matches = re.findall(r"(?<![\d.])(\d+(?:[.,]\d+)?)\s*%", text)
+        return [InvoiceMiner._normalize_percent(x) for x in matches]
+
+    def _extract_vat_amounts(self, text: str) -> list[str]:
+        patterns = [
+            r"VAT\s*\([^)]*\)\s*:\s*(?:EUR\s*)?(?P<amount>-?[\d'.,]+)",
+            r"VAT\s*:\s*(?:EUR\s*)?(?P<amount>-?[\d'.,]+)",
+            r"amounting\s+to\s+(?:EUR\s*)?(?P<amount>-?[\d'.,]+)",
+            r"statutory\s+VAT\s+of\s+(?:EUR\s*)?(?P<amount>-?[\d'.,]+)",
+            r"statutory\s+VAT\s*\([^)]*\)\s+applies:\s*(?:EUR\s*)?(?P<amount>-?[\d'.,]+)",
+        ]
+        found: list[str] = []
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, re.I):
+                found.append(self._normalize_number(match.group("amount")))
+        return self._unique(found)
+
+    @staticmethod
+    def _normalize_percent(value: str) -> str:
+        # Canonical percentage as a string: 20% -> "0.20", 2% -> "0.02".
+        value = value.strip().replace(",", ".")
+        if "." in value:
+            whole, fraction = value.split(".", 1)
+            fraction = fraction.rstrip("0")
+        else:
+            whole, fraction = value, ""
+
+        digits = whole + fraction
+        if not digits:
+            return "0.00"
+
+        if len(fraction) == 0:
+            if len(digits) == 1:
+                return "0.0" + digits
+            if len(digits) == 2:
+                return "0." + digits
+            return digits[:-2] + "." + digits[-2:]
+
+        split = len(digits) - 2
+        if split <= 0:
+            return "0." + ("0" * (-split)) + digits
+        return digits[:split] + "." + digits[split:]
+
+    # ------------------------------------------------------------------
+    # Discount
+    # ------------------------------------------------------------------
+
+    def _mine_discount(self, raw_value: Optional[str], terms: str) -> Optional[dict[str, Any]]:
+        if not raw_value:
+            # Trade terms can exist in payment terms without a rendered discount line.
+            normalized_terms = self._mine_payment_terms(terms)
+            if re.search(r"\b\d+\s*/\s*\d+\s+net\s+\d+\b", normalized_terms, re.I):
+                rate = re.search(r"\b(\d+)\s*/\s*(\d+)\s+net\s+\d+\b", normalized_terms, re.I)
+                return {
+                    "type": "trade_terms",
+                    "value": self._normalize_percent(rate.group(1)),
+                    "applied_to": "subtotal",
+                    "description": f"{normalized_terms} — conditional early-payment discount",
+                    "conditional": True,
+                }
+            return None
+
+        text = str(raw_value).strip()
+
+        pct = self.DISCOUNT_PATTERNS["percentage"].search(text)
+        if pct:
+            rate = self._normalize_percent(pct.group("rate"))
+            return {
+                "type": "percentage",
+                "value": rate,
+                "applied_to": "subtotal",
+                "description": text.rstrip("."),
+                "conditional": bool(re.search(r"early\s+payment", text, re.I)),
+            }
+
+        if self.DISCOUNT_PATTERNS["rebate"].search(text):
+            return {
+                "type": "trade_terms",
+                "value": self._extract_discount_amount(text),
+                "applied_to": "subtotal",
+                "description": text.rstrip("."),
+                "conditional": True,
+            }
+
+        return {
+            "type": "amount",
+            "value": self._extract_discount_amount(text),
+            "applied_to": "subtotal",
+            "description": text.rstrip("."),
+            "conditional": False,
+        }
+
+    def _mine_discount_amount(
+        self,
+        raw_value: Optional[str],
+        number_format: str,
+        discount: Optional[dict[str, Any]],
+    ) -> str:
+        if not raw_value:
+            return "0.00"
+        if discount and discount["conditional"]:
+            return "0.00"
+        return self._extract_discount_amount(str(raw_value))
+
+    def _extract_discount_amount(self, text: str) -> str:
+        candidates = re.findall(r"-?\s*(?:EUR\s*)?(\d[\d'.,]*)", text, re.I)
+        if not candidates:
+            raise InvoiceMiningError(f"Cannot mine discount amount: {text!r}")
+        # Prefer the last monetary token, which is the rendered discount amount.
+        return self._normalize_number(candidates[-1])
+
+    # ------------------------------------------------------------------
+    # Money / numbers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_quantity(value: str) -> str:
+        value = value.strip()
+        if not value:
+            return ""
+        if re.fullmatch(r"\d+\.0+", value):
+            return value.split(".", 1)[0]
+        return value.replace(",", ".")
+
+    @staticmethod
+    def _normalize_number(value: str) -> str:
+        """
+        Normalize a rendered numeric token while keeping it a string.
+
+        Supported:
+          12'345.67   -> 12345.67
+          12.345,67   -> 12345.67
+          12,345.67   -> 12345.67
+          123,20      -> 123.20
+          123.20      -> 123.20
+        """
+        value = value.strip()
+        value = value.replace("EUR", "").replace("€", "")
+        value = value.replace(" ", "").rstrip(".")
+
+        sign = ""
+        if value.startswith(("-", "+")):
+            sign, value = value[0], value[1:]
+
+        if "'" in value:
+            value = value.replace("'", "")
+        elif "." in value and "," in value:
+            # Last separator determines the decimal separator.
+            if value.rfind(",") > value.rfind("."):
+                value = value.replace(".", "").replace(",", ".")
+            else:
+                value = value.replace(",", "")
+        elif "," in value:
+            parts = value.split(",")
+            if len(parts[-1]) == 2:
+                value = "".join(parts[:-1]) + "." + parts[-1]
+            else:
+                value = "".join(parts)
+        elif "." in value:
+            parts = value.split(".")
+            if len(parts) > 2:
+                # e.g. 1.234.567, but no comma: separators are grouping.
+                value = "".join(parts[:-1]) + "." + parts[-1]
+
+        if "." not in value:
+            value += ".00"
+        else:
+            whole, fraction = value.split(".", 1)
+            fraction = (fraction + "00")[:2]
+            value = f"{whole}.{fraction}"
+
+        return sign + value
+
+    @staticmethod
+    def _extract_money_string(value: str, number_format: str) -> str:
+        matches = re.findall(r"-?[\d][\d'.,]*", str(value))
+        if not matches:
+            raise InvoiceMiningError(f"No money value found in {value!r}")
+        return InvoiceMiner._normalize_number(matches[-1])
 
     def _detect_number_format(self, raw: dict[str, Any]) -> str:
         samples: list[str] = []
         for item in raw.get("items", []):
             if isinstance(item, dict):
-                samples.extend([item.get("Unit Price", ""), item.get("Amount", "")])
+                samples.extend([str(item.get("Unit Price", "")), str(item.get("Amount", ""))])
             elif isinstance(item, str):
                 samples.append(item)
-        samples.extend([raw.get("subtotal", ""), raw.get("total", "")])
+        samples.extend([str(raw.get("subtotal", "")), str(raw.get("total", ""))])
 
         text = " ".join(samples)
         if re.search(r"\d'\d", text):
-            return "apostrophe"
+            return "swiss"
         if re.search(r"\d+\.\d{3},\d{2}\b", text):
             return "eu_dot"
-        if re.search(r"\d+,\d{2}\b", text):
+        if re.search(r"\d+,\d{2}\b", text) and not re.search(r"\d+,\d{3}\.\d{2}\b", text):
             return "eu_comma"
         return "us_comma"
 
-    @staticmethod
-    def _detect_number_format_from_number(value: str) -> str:
-        value = value.strip()
-        if "'" in value:
-            return "apostrophe"
-        if re.fullmatch(r"\d+\.\d{3},\d{2}", value):
-            return "eu_dot"
-        if re.fullmatch(r"\d+,\d{2}", value):
-            return "eu_comma"
-        return "us_comma"
+    # ------------------------------------------------------------------
+    # Bank / terms / currency
+    # ------------------------------------------------------------------
 
-    def _parse_decimal(self, value: str, number_format: str) -> Decimal:
-        value = value.strip().replace("EUR", "").replace("€", "")
-        value = value.replace(" ", "")
-        value = value.rstrip(" .")
-        negative = value.startswith("-")
-        value = value.lstrip("+-")
+    def _mine_bank(self, raw: Optional[str]) -> dict[str, str]:
+        if not raw:
+            return {"bank_name": "", "iban": "", "bic": "", "country": ""}
 
-        if number_format == "apostrophe":
-            value = value.replace("'", "")
-        elif number_format == "eu_dot":
-            value = value.replace(".", "").replace(",", ".")
-        elif number_format == "eu_comma":
-            value = value.replace(",", ".")
-        else:
-            value = value.replace(",", "")
+        text = str(raw)
+        iban_match = re.search(r"IBAN:\s*([^|]+)", text, re.I)
+        bic_match = re.search(r"BIC:\s*([^|]+)", text, re.I)
+        bank_match = re.match(r"\s*Bank:\s*(.*?)(?:\s*\||$)", text, re.I)
 
-        try:
-            result = Decimal(value)
-        except InvalidOperation as exc:
-            raise InvoiceMiningError(f"Invalid decimal {value!r} from {number_format}") from exc
-        return -result if negative else result
+        if not (iban_match and bic_match and bank_match):
+            return {"bank_name": "", "iban": "", "bic": "", "country": ""}
+
+        iban = re.sub(r"\s+", "", iban_match.group(1)).upper()
+        return {
+            "bank_name": bank_match.group(1).strip(),
+            "iban": iban,
+            "bic": bic_match.group(1).strip().upper(),
+            "country": self.COUNTRY_FROM_IBAN.get(iban[:2], ""),
+        }
 
     @staticmethod
-    def _percent(value: str) -> Decimal:
-        value = value.replace(",", ".")
-        return Decimal(value) / Decimal("100")
-
-    def _extract_money(self, value: str, number_format: str) -> Decimal:
-        matches = re.findall(r"-?\d[\d'.,]*", value)
-        if not matches:
-            raise InvoiceMiningError(f"No money value in {value!r}")
-        return self._parse_decimal(matches[-1], self._detect_number_format_from_number(matches[-1]))
-
-    # ------------------------------ bank / dates / country ------------------------------
-
-    def _parse_bank(self, value: Optional[str]) -> dict[str, str]:
-        if not value:
-            raise InvoiceMiningError("Bank field missing")
-        iban = re.search(r"IBAN:\s*([A-Z]{2}[A-Z0-9 ]+?)(?:\s*\||$)", value, re.I)
-        bic = re.search(r"BIC:\s*([A-Z0-9]+)", value, re.I)
-        name = re.match(r"Bank:\s*(.*?)(?:\s*\||$)", value, re.I)
-        if not (iban and bic and name):
-            raise InvoiceMiningError(f"Cannot parse bank field: {value!r}")
-        return {"bank_name": name.group(1).strip(), "iban": re.sub(r"\s+", "", iban.group(1)).upper(), "bic": bic.group(1).strip().upper()}
-
-    def _infer_vendor_country(self, iban: str) -> str:
-        return self.COUNTRY_FROM_IBAN.get(iban[:2], "Unknown")
-
-    def _country_from_address(self, value: str) -> str:
-        for country in self.COUNTRY_NAMES:
-            if country.lower() in value.lower():
-                return country
-        return "Unknown"
+    def _mine_bank_details(raw: Optional[str]) -> str:
+        return str(raw).strip() if raw else ""
 
     @staticmethod
-    def _currency(raw: dict[str, Any]) -> str:
-        text = " ".join([raw.get("total", ""), raw.get("subtotal", "")])
+    def _mine_payment_terms(raw: Optional[str]) -> str:
+        if not raw:
+            return ""
+        return re.sub(r"^Payment terms:\s*", "", str(raw).strip(), flags=re.I)
+
+    @staticmethod
+    def _mine_currency(raw: dict[str, Any]) -> str:
+        text = f"{raw.get('subtotal', '')} {raw.get('total', '')}"
         if re.search(r"\bEUR\b|€", text, re.I):
             return "EUR"
-        return "UNKNOWN"
+        return ""
+
+    # ------------------------------------------------------------------
+    # Misc semantic metadata
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def _normalize_payment_terms(value: str) -> str:
-        return re.sub(r"^Payment terms:\s*", "", value.strip(), flags=re.I)
+    def _is_credit_note(header: list[str]) -> bool:
+        return "CREDIT NOTE" in " ".join(header).upper()
 
-    # ------------------------------ canonicalization / validation ------------------------------
-
-    def _canonical_tax_values(
+    def _mine_edge_case(
         self,
-        *,
-        item_subtotal: Decimal,
-        vat_info: dict[str, Any],
-        rendered_subtotal: str,
-        line_items: list[LineItem],
-    ) -> tuple[Decimal, Decimal]:
-        if vat_info["type"] == "reverse_charge":
-            return item_subtotal, Decimal("0.00")
-
-        if vat_info["type"] == "included":
-            rate = vat_info["rate"]
-            if rate is not None:
-                # In this dataset the listed line-item amounts are gross when VAT is included.
-                net = (item_subtotal / (Decimal("1") + rate)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                return net, item_subtotal - net
-
-            return item_subtotal, Decimal("0.00")
-
-        if vat_info["type"] == "mixed":
-            # Exact mixed-rate decomposition is not inferable from invoice-level text alone.
-            # Preserve the net item sum and use the explicit VAT amount if available.
-            return item_subtotal, vat_info["amount"]
-
-        if vat_info["rate"] is not None:
-            vat = (item_subtotal * vat_info["rate"]).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            return item_subtotal, vat
-
-        if vat_info["amount"]:
-            return item_subtotal, vat_info["amount"]
-
-        return item_subtotal, Decimal("0.00")
-
-    @staticmethod
-    def _close(a: Decimal, b: Decimal, tolerance: Decimal = Decimal("0.02")) -> bool:
-        return abs(a - b) <= tolerance
-
-    def _consistency(self, *, canonical_subtotal: Decimal, canonical_vat: Decimal, canonical_total: Decimal,
-                     rendered_subtotal: Decimal, rendered_total: Decimal, discount: dict[str, Any]) -> str:
-        # Rendered subtotal may intentionally be gross or otherwise wrong; this check
-        # compares against the canonical semantics rather than assuming labels are truthful.
-        subtotal_ok = self._close(canonical_subtotal, rendered_subtotal)
-        total_ok = self._close(canonical_total, rendered_total)
-        if subtotal_ok and total_ok:
-            return "correct"
-        return "inconsistent"
-
-    def _edge_case(self, raw: dict[str, Any], vat_info: dict[str, Any], discount_info: dict[str, Any]) -> str:
+        raw: dict[str, Any],
+        vat: dict[str, Any],
+        discount: Optional[dict[str, Any]],
+    ) -> str:
         flags: list[str] = []
-        first_header = " ".join(raw.get("header", []))
-        if "CREDIT NOTE" in first_header.upper():
+        if self._is_credit_note(raw.get("header", [])):
             flags.append("credit_note")
-        if vat_info["type"] == "mixed":
+        if vat["variant"] == "mixed":
             flags.append("mixed_vat")
-        if vat_info["type"] == "reverse_charge":
+        if vat["variant"] == "reverse_charge":
             flags.append("reverse_charge")
-        if vat_info["type"] == "included":
+        if vat["variant"] == "included":
             flags.append("vat_included")
-        if discount_info["matched"] and discount_info["conditional"]:
+        if discount and discount["conditional"]:
             flags.append("conditional_discount")
         if any(
-            isinstance(i, dict) and (
-                "Statutory VAT" in str(i.get("Description", ""))
-                or "Net prices" in str(i.get("Description", ""))
+            isinstance(item, dict)
+            and re.search(
+                r"Statutory VAT|Net prices|All prices include|reverse charge",
+                str(item.get("Description", "")),
+                re.I,
             )
-            for i in raw.get("items", [])
+            for item in raw.get("items", [])
         ):
             flags.append("field_bleed")
         return "+".join(flags) if flags else "none"
 
     @staticmethod
-    def _error_note(consistency: str, raw: dict[str, Any], canonical_total: Decimal, rendered_total: Decimal) -> Optional[str]:
-        if consistency == "correct":
-            return None
-        return f"Rendered total {rendered_total} differs from canonical total {canonical_total}; preserve rendered values separately."
+    def _clean_description(description: str) -> str:
+        description = re.sub(
+            r"\s+(?:"
+            r"Statutory VAT(?:\s*\([^)]*\))?[^.]*applies\."
+            r"|Net prices\. Statutory VAT applies\."
+            r"|All prices include .*?VAT\."
+            r"|VAT reverse charge mechanism.*"
+            r"|Plus statutory VAT as detailed below\."
+            r")",
+            " ",
+            description,
+            flags=re.I,
+        )
+        description = re.sub(r"\s+«$", "", description)
+        return re.sub(r"\s{2,}", " ", description).strip()
+
+    @staticmethod
+    def _unique(values: list[str]) -> list[str]:
+        result: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            if value not in seen:
+                seen.add(value)
+                result.append(value)
+        return result
