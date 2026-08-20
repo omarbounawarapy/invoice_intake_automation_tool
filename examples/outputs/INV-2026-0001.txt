@@ -1,0 +1,18 @@
+Invoice INV-2026-0001                                                  CORRECT
+Praxis Consulting Group AG (AT)  ->  Bergkristall Maschinenbau GmbH (DE)
+Date: 2026-04-15    Due: 2026-05-15    Currency: EUR
+------------------------------------------------------------------------------
+Line items
+  Travel expenses (Frankfurt–Zürich)                 3 x 26,614.40 = 79,843.20
+  Software licence renewal — 50 seats                  1 x 9,583.60 = 9,583.60
+  Executive workshop (2 days)                          1 x 2,614.80 = 2,614.80
+  Hardware procurement — 4 workstations               3 x 9,834.20 = 29,502.60
+  Compliance audit preparation (regul...                50 x 185.70 = 9,285.00
+  Legal opinion — cross-border financing             1 x 46,646.20 = 46,646.20
+  Consulting hours — Senior Partner                  1 x 32,740.50 = 32,740.50
+------------------------------------------------------------------------------
+Subtotal:                                                       210,215.90 EUR
+Discount (2%):                                                   -4,204.32 EUR
+VAT (20%):                                                       42,043.18 EUR
+==============================================================================
+Total:                                                          248,054.76 EUR

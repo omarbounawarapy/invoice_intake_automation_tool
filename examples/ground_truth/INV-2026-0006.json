@@ -1,0 +1,62 @@
+{
+  "invoice_id": "INV-2026-0006",
+  "vendor": "Stark Industries Europe Ltd",
+  "vendor_country": "GB",
+  "vendor_address": {
+    "street": "25 Greywell Close",
+    "postal_code": "EC2R 6AA",
+    "city": "London"
+  },
+  "recipient": "Benelux Windmill Automation B.V.",
+  "recipient_country": "NL",
+  "recipient_address": {
+    "street": "Walvisgracht 421",
+    "postal_code": "1017 BP",
+    "city": "Amsterdam"
+  },
+  "date": "2026-03-05",
+  "due_date": "2026-03-05",
+  "line_items": [
+    {
+      "description": "Marketing collateral refresh",
+      "quantity": 1,
+      "unit_price": "5337.20",
+      "vat_rate": "0.20",
+      "amount": "5337.20"
+    },
+    {
+      "description": "Board meeting facilitation",
+      "quantity": 5,
+      "unit_price": "1516.30",
+      "vat_rate": "0.20",
+      "amount": "7581.50"
+    }
+  ],
+  "subtotal": "12918.70",
+  "vat_rate": "0.20",
+  "vat_amount": "2583.74",
+  "discount": {
+    "type": "percentage",
+    "value": "0.05",
+    "applied_to": "subtotal",
+    "description": "early payment discount",
+    "conditional": false
+  },
+  "discount_amount": "645.94",
+  "total": "14856.50",
+  "currency": "EUR",
+  "payment_terms": "Due upon receipt",
+  "bank_details": "Lloyds Bank | IBAN: GB01 1333 9804 2776 4157 74 | BIC: LOYDGB21XXX",
+  "variants": {
+    "vat_variant": "explicit_included",
+    "discount_variant": "explicit_percentage",
+    "number_format": "english",
+    "layout": "table",
+    "consistency": "subtotal_error",
+    "edge_case": "none"
+  },
+  "rendered_subtotal": "12923.70",
+  "rendered_total": "14856.50",
+  "error_note": "Displayed subtotal 12923.70 differs from true subtotal 12918.70 by +5.00.",
+  "is_credit_note": false
+}

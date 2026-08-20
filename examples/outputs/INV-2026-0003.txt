@@ -1,0 +1,15 @@
+Invoice INV-2026-0003                                                  CORRECT
+Pearson Hardman (GB)  ->  Bergkristall Maschinenbau GmbH (DE)
+Date: 2026-04-11    Due: 2026-05-11    Currency: EUR
+------------------------------------------------------------------------------
+Line items
+  Cloud infrastructure migration — Ph...             1 x 11,402.00 = 11,402.00
+  Database optimisation retainer — March              100 x 368.70 = 36,870.00
+  Retainer fee — ongoing counsel                     1 x 24,079.00 = 24,079.00
+  Board meeting facilitation                          2 x 5,082.50 = 10,165.00
+------------------------------------------------------------------------------
+Subtotal:                                                        82,516.00 EUR
+Discount (2%) [offered, not applied]:                                 0.00 EUR
+VAT (20%):                                                       16,503.20 EUR
+==============================================================================
+Total:                                                           99,019.20 EUR

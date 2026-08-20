@@ -1,0 +1,17 @@
+Invoice INV-2026-0004                                              TOTAL ERROR
+Vandelay Industries GmbH (AT)  ->  Mittelstand Digital Solutions GmbH (DE)
+Date: 2026-02-23    Due: 2026-03-25    Currency: EUR
+------------------------------------------------------------------------------
+Line items
+  Legal opinion — cross-border financing               1 x 6,152.40 = 6,152.40
+  Quarterly newsletter design                        1 x 13,741.10 = 13,741.10
+  Software licence renewal — 50 seats                2 x 28,410.10 = 56,820.20
+  Strategic advisory — Q1 2026 (Power...            3 x 36,360.40 = 109,081.20
+------------------------------------------------------------------------------
+Subtotal:                                                       185,794.90 EUR
+Discount (2%) [offered, not applied]:                                 0.00 EUR
+VAT (20%):                                                       37,158.98 EUR
+==============================================================================
+Total:                                                          222,953.88 EUR
+
+! Displayed total 218494.80 differs from computed total 222953.88 by -4459.08 (-2.00%).
