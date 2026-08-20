@@ -3,8 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any, Optional
 
+from ..errors import MiningError
 
-class InvoiceMiningError(ValueError):
+
+class InvoiceMiningError(MiningError):
     pass
 
 
@@ -407,21 +409,30 @@ class InvoiceMiner:
         pct = self.DISCOUNT_PATTERNS["percentage"].search(text)
         if pct:
             rate = self._normalize_percent(pct.group("rate"))
+            # A percentage discount rendered with its own line (and, usually,
+            # a computed amount alongside it) has already been applied by the
+            # vendor -- it is not an optional early-payment offer. Only the
+            # unrendered "N/M net X" trade-terms case (handled above, when
+            # raw_value is absent) represents a genuinely conditional
+            # discount the recipient may or may not end up taking.
             return {
                 "type": "percentage",
                 "value": rate,
                 "applied_to": "subtotal",
                 "description": text.rstrip("."),
-                "conditional": bool(re.search(r"early\s+payment", text, re.I)),
+                "conditional": False,
             }
 
         if self.DISCOUNT_PATTERNS["rebate"].search(text):
+            # A rebate "per agreement" is a fixed, already-negotiated
+            # reduction rendered as an absolute amount -- not a percentage
+            # and not conditional on future customer behaviour.
             return {
-                "type": "trade_terms",
+                "type": "amount",
                 "value": self._extract_discount_amount(text),
                 "applied_to": "subtotal",
                 "description": text.rstrip("."),
-                "conditional": True,
+                "conditional": False,
             }
 
         return {
@@ -564,7 +575,11 @@ class InvoiceMiner:
 
     @staticmethod
     def _mine_bank_details(raw: Optional[str]) -> str:
-        return str(raw).strip() if raw else ""
+        if not raw:
+            return ""
+        # Mirrors _mine_payment_terms: strip the field's own rendered
+        # label rather than exposing it as part of the semantic value.
+        return re.sub(r"^\s*Bank:\s*", "", str(raw).strip(), flags=re.I)
 
     @staticmethod
     def _mine_payment_terms(raw: Optional[str]) -> str:
