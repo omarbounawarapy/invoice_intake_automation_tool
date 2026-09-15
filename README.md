@@ -1,5 +1,9 @@
 # Invoice Intake Automation Tool
 
+[![CI](https://github.com/omarbounawarapy/invoice_intake_automation_tool/actions/workflows/ci.yml/badge.svg)](https://github.com/omarbounawarapy/invoice_intake_automation_tool/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
+
 Extracts, normalizes, and validates structured data from semi-structured
 invoice PDFs, and exports it to **JSON, CSV, or Excel (XLSX)** through a
 single command-line tool.
@@ -325,6 +329,8 @@ worth a second look via `consistency`.
 * [`docs/pipeline.md`](docs/pipeline.md) -- ingest → mine → transform → validate → serialize, and where each failure type comes from
 * [`docs/cli.md`](docs/cli.md) -- full command reference
 * [`docs/limitations.md`](docs/limitations.md) -- honest scope boundaries
+* [`CHANGELOG.md`](CHANGELOG.md) -- notable changes by version
+* [`CONTRIBUTING.md`](CONTRIBUTING.md) -- how to set up, test, and submit changes
 
 ## Future improvements
 
